@@ -131,9 +131,17 @@ def generate(args,tenowait,tewait,mode):
 		xcolored = lambda x,y: x
 		tableformat = "plain"
 
+	xinf = float("inf")
+
 	for x in tenowait:
-		if int(x["Days Left"]) <= 0:
+		if x["Days Left"] <= 0:
 			x["Days Left"] = xcolored(str(x["Days Left"]),"red")
+		del x["Days Since"]
+	for x in tewait:
+		if x["Days Left"] == xinf:
+			x["Days Left"] = "(%d)" % x["Days Since"]
+		del x["Days Since"]
+
 	body = tabulate.tabulate(tenowait,headers="keys",tablefmt=tableformat)
 	if args.web != "":
 		body = args.web + "\n\n" + body
@@ -169,20 +177,20 @@ def main():
 	t,cf = findtasks(wb["Tasks"],q)
 	t.sort(key=lambda x: (x["Days Left"],-x["Days Since"]))
 	xinf = float("inf")
-	if args.a:
-		t = t
-	else:
-		t = [x for x in t if x["Days Left"] != -xinf and x["Days Left"] != xinf]
-
+	
 	# remove not actiond
 	if args.w:
 		wait,nowait = splitter(t,lambda x: x["Status"].lower().find("wait") >= 0)
+		t = [x for x in t if x["Days Left"] != -xinf and x["Days Left"] != xinf]
 	else:
 		wait = []
 		nowait = t
+
+	if not args.a:
+		t = [x for x in nowait if x["Days Left"] != -xinf and x["Days Left"] != xinf]
 	#print tabulate.tabulate(t,headers="keys")
 
-	fields = ["Group","What","Days Left"]
+	fields = ["Group","What","Days Left","Days Since"]
 	if args.f:
 		# first the ones above, then all the others sorted
 		fields = fields + sorted(list(cf-set(fields)))
