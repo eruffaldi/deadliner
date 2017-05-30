@@ -103,6 +103,8 @@ def findtasks(ws,q):
 			z = {}
 			z.update(template)
 			z["Group"] = g
+			if z["Status"] is None:
+				z["Status"] = ""
 			for j,f in enumerate(ff):
 				z[f] = ws.cell(row=i+1,column=j+1).value
 			if z["Days Left"] is None or z["Days Left"] == "":
@@ -180,7 +182,7 @@ def main():
 	
 	# remove not actiond
 	if args.w:
-		wait,nowait = splitter(t,lambda x: x["Status"].lower().find("wait") >= 0)
+		wait,nowait = splitter(t,lambda x: str(x["Status"]).lower().find("wait") >= 0)
 		t = [x for x in t if x["Days Left"] != -xinf and x["Days Left"] != xinf]
 	else:
 		wait = []
