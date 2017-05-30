@@ -20,9 +20,27 @@ Model:
 
 Entities are ordered by (-DaysLeft +DaysSince), we could add group priority
 
+Email Configure
+	http://www.anujgakhar.com/2011/12/09/using-macosx-lion-command-line-mail-with-gmail-as-smtp/
+	vi /etc/postfix/main.cf
+	relayhost = [mail.sssup.it]:465
+	smtp_sasl_auth_enable = yes
+	smtp_sasl_password_maps = hash:/etc/postfix/sasl_passwd
+	smtp_sasl_security_options = noanonymous
+	smtp_use_tls = yes
+
+	/etc/postfix/sasl_passwd
+	[mail.sssup.it]:465 e.ruffaldi@sssup.it:2MinuRomeo
+
+	sudo chmod 600 /etc/postfix/sasl_passwd
+	sudo postmap /etc/postfix/sasl_passwd
+	sudo launchctl stop org.postfix.master
+	sudo launchctl start org.postfix.master
+
+
 """
+from termcolor import colored
 import urllib2
-import argparse
 from openpyxl import *
 import os
 import tabulate
@@ -63,6 +81,12 @@ def findregions(ws):
 				rows += 1
 	return regions
 
+def splitter(data, pred):
+    yes, no = [], []
+    for d in data:
+        (yes if pred(d) else no).append(d)
+    return (yes, no)
+
 def findtasks(ws,q):
 	allfields = reduce(lambda x,y: x|y,[set(x["fields"]) for x in q.values()],set())
 	allfields.add("Group")
@@ -94,6 +118,30 @@ def findtasks(ws,q):
 			t.append(z)
 	return (t,allfields-removefields)
 				
+def coloredhtml(t,c):
+	return "<span style='color:%s'>%s</span>" % (c,t)
+def generate(args,tenowait,tewait,mode):
+	if mode == "colored":
+		xcolored = colored
+		tableformat = ""
+	elif mode == "html":
+		xcolored = coloredhtml
+		tableformat = "html"
+	else:
+		xcolored = lambda x,y: x
+		tableformat = "plain"
+
+	for x in tenowait:
+		if int(x["Days Left"]) <= 0:
+			x["Days Left"] = xcolored(str(x["Days Left"]),"red")
+	body = tabulate.tabulate(tenowait,headers="keys",tablefmt=tableformat)
+	if args.web != "":
+		body = args.web + "\n\n" + body
+	if len(tewait) > 0:
+		body += "\n" + "\nWaiting\n" + xcolored(tabulate.tabulate(tewait,headers="keys",tablefmt=tableformat),"cyan")
+
+	return body
+
 def main():
 
 	parser = argparse.ArgumentParser(description='Deadliner')
@@ -105,6 +153,7 @@ def main():
 	parser.add_argument('--web',help="open link")
 	parser.add_argument('-s',help="Subject",default="Task Deadlines")
 	parser.add_argument('-f',help="Full Fields",action="store_true")
+	parser.add_argument('-w',type=bool,default=True,help="keep wait separated")
 	
 	args = parser.parse_args()
 
@@ -120,24 +169,32 @@ def main():
 	t,cf = findtasks(wb["Tasks"],q)
 	t.sort(key=lambda x: (x["Days Left"],-x["Days Since"]))
 	xinf = float("inf")
-	# remove not actiond
 	if args.a:
 		t = t
 	else:
 		t = [x for x in t if x["Days Left"] != -xinf and x["Days Left"] != xinf]
+
+	# remove not actiond
+	if args.w:
+		wait,nowait = splitter(t,lambda x: x["Status"].lower().find("wait") >= 0)
+	else:
+		wait = []
+		nowait = t
 	#print tabulate.tabulate(t,headers="keys")
 
 	fields = ["Group","What","Days Left"]
 	if args.f:
 		# first the ones above, then all the others sorted
 		fields = fields + sorted(list(cf-set(fields)))
-	te = [OrderedDict([(f,x[f]) for f in fields]) for x in t] 
-	body = tabulate.tabulate(te,headers="keys")
-	body = args.web + "\n" + body
+
+	tewait = [OrderedDict([(f,x[f]) for f in fields]) for x in wait]
+	tenowait = [OrderedDict([(f,x[f]) for f in fields]) for x in nowait]
+
+	body = generate(args,tenowait,tewait,"colored")
 	print body
 	if args.m:
 		print "Sending mail to:",args.to,"subject:",args.s
-		msg = MIMEText(body)
+		msg = MIMEText(generate(args,tewait,tenowait,"text"))
 		msg['Subject'] = args.s
 		if args.to is None:
 			raise Exception("missing args.to")
@@ -145,14 +202,14 @@ def main():
 			msg['From'] = args.to
 			msg['To'] = args.to
 
-			p = Popen(['mail', '-s',msg["Subject"],msg["To"]], stdout=PIPE, stdin=PIPE, stderr=STDOUT)    
-			mail_stdout = p.communicate(input=body)[0]
-			print mail_stdout
-			# Send the message via our own SMTP server, but don't include the
-			# envelope header.
-			#s = smtplib.SMTP('localhost')
-			#s.sendmail(me, [you], msg.as_string())
-			#s.quit()
+			if True:
+				p = Popen(['mail', '-s',msg["Subject"],msg["To"]], stdout=PIPE, stdin=PIPE, stderr=STDOUT)    
+				mail_stdout = p.communicate(input=msg.as_string())[0]
+				print mail_stdout
+			else:
+				s = smtplib.SMTP('localhost')
+				s.sendmail(args.to, [args.to], msg.as_string())
+				s.quit()
 	if args.o:
 		webbrowser.open(args.web)
 	
