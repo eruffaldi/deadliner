@@ -65,7 +65,6 @@ def findregions(ws):
 			if r[1] == "Type" and r[2] == "Status":
 				fields = [x for x in r if x != "" and x is not None]
 				regionname = lasthead
-				#print "found",lasthead,fields
 				inpart = True
 				rows = 0
 				relrow = i+1
@@ -73,12 +72,13 @@ def findregions(ws):
 				lasthead = r[0]
 		else:
 			if r[0] is None:
-				#print "ended with",rows
 				inpart = False
 				lasthead = ""
 				regions[regionname] = dict(rows=rows,endrow=i,fields=fields,startrow=relrow)
 			else:
 				rows += 1
+	if inpart:
+		regions[regionname] = dict(rows=rows,endrow=i,fields=fields,startrow=relrow)
 	return regions
 
 def splitter(data, pred):
@@ -107,10 +107,14 @@ def findtasks(ws,q):
 				z["Status"] = ""
 			for j,f in enumerate(ff):
 				z[f] = ws.cell(row=i+1,column=j+1).value
-			if z["Days Left"] is None or z["Days Left"] == "":
-				z["Days Left"] = xinf
+			q = z.get("Days Left WD",None)
+			if q is not None and q != "#N/A":
+				z["Days Left"] = q
 			else:
-				z["Days Left"] = float(z["Days Left"])
+				if z["Days Left"] is None or z["Days Left"] == "":
+					z["Days Left"] = xinf
+				else:
+					z["Days Left"] = float(z["Days Left"])
 			if z["Days Since"] is None or z["Days Since"] == "":
 				z["Days Since"] = -xinf
 			else:
@@ -158,6 +162,7 @@ def main():
 	parser.add_argument('-m',action="store_true",help="send email")
 	parser.add_argument('-o',action="store_true",help="open web link")
 	parser.add_argument('--to',help="send email target")
+	parser.add_argument('--regions',help="regions info",action="store_true")
 	parser.add_argument('-i',help="input link or file")
 	parser.add_argument('-a',action="store_true",help="all actions, otherwise remove open ended")
 	parser.add_argument('--web',help="open link")
@@ -176,6 +181,10 @@ def main():
 
 	wb = load_workbook(tmp,data_only=True)
 	q = findregions(wb["Tasks"])
+	if args.regions:
+		for k,v in q.iteritems():
+			print k,v
+		return
 	t,cf = findtasks(wb["Tasks"],q)
 	t.sort(key=lambda x: (x["Days Left"],-x["Days Since"]))
 	xinf = float("inf")

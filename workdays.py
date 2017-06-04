@@ -48,10 +48,7 @@ def validatedate(x):
 	else:
 		return x
 def validaterange(x):
-	if not isinstance(x,tuple):
-		x = validatedate()
-		return (x,x)
-	else:
+	if isinstance(x,list) or isinstance(x,tuple):
 		x,y = x
 		x = validatedate(x)
 		y = validatedate(y)
@@ -59,6 +56,9 @@ def validaterange(x):
 			return (y,x)
 		else:
 			return (x,y)
+	else:
+		x = validatedate(x)
+		return (x,x)
 def computeworkdays(interval,daysoff,workOnSaturdays=False):
 
 	first,last = validaterange(interval) 
@@ -121,16 +121,12 @@ def workdaysbetween(a,b,f,l,wd):
 	print "lookup",a,b,"as",ai,bi,"outside days",q
 	return q + (wd[ai]-wd[bi])
 def main():
-	holidays = [
-		("2017/06/04","2017/06/07"),
-		("2017/06/01","2017/06/02"),
-		("2017/07/01","2017/07/10"),
-		("2017/12/23","2017/12/31")
-	]
-	f,l,q = computeworkdays(("2017/06/13",datetime.date.today()),holidays)
-	print "\n".join(["%s\t%d" % (f+datetime.timedelta(days=i),q[i]) for i in range(0,len(q))])
-	print workdaysbetween("2017/05/31","2017/06/04",f,l,q)
-	print workdaysbetween("2017/05/31","2017/06/08",f,l,q)
+	holidays = [x.strip().split("\t")[0:2] for x in open("my.txt","r") if x.strip() != "" and x[0] == "2"]
+	f,l,q = computeworkdays(("2017/06/01","2017/12/31"),holidays)
+	# print out
+	open("out.txt","wb").write("\n".join(["%s\t%d" % ((f+datetime.timedelta(days=i)).isoformat(),q[i]) for i in range(0,len(q))]))
+	#print workdaysbetween("2017/05/31","2017/06/04",f,l,q)
+	#print workdaysbetween("2017/05/31","2017/06/08",f,l,q)
 
 if __name__ == '__main__':
 	main()
