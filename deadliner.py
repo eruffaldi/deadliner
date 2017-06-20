@@ -62,7 +62,7 @@ def findregions(ws):
 	regions = dict()
 	for i,r in enumerate(ws.values):
 		if not inpart:
-			if r[1] == "Type" and r[2] == "Status":
+			if r[2] == "Type" and r[3] == "Status":
 				fields = [x for x in r if x != "" and x is not None]
 				regionname = lasthead
 				inpart = True
@@ -87,7 +87,7 @@ def splitter(data, pred):
         (yes if pred(d) else no).append(d)
     return (yes, no)
 
-def findtasks(ws,q):
+def findtasks(ws,q,args):
 	allfields = reduce(lambda x,y: x|y,[set(x["fields"]) for x in q.values()],set())
 	allfields.add("Group")
 	template = dict([(x,"") for x in allfields])
@@ -102,23 +102,35 @@ def findtasks(ws,q):
 		for i in range(y["startrow"],y["endrow"]):
 			z = {}
 			z.update(template)
+			#if g == "Writing":
+			#	g = u"\U0001F4C4  " + g
 			z["Group"] = g
 			if z["Status"] is None:
 				z["Status"] = ""
+			if not args.a and z["Status"].lower().find("done") >= 0:
+				continue
 			for j,f in enumerate(ff):
 				z[f] = ws.cell(row=i+1,column=j+1).value
 			q = z.get("Days Left WD",None)
-			if q is not None and q != "#N/A":
-				z["Days Left"] = q
+			if q is not None and q != "#N/A" and q != "":
+				try:
+					z["Days Left"] = float(q)
+				except:
+					print "cannot convert Days Left WD",q,"to string"
+					z["Days Left"] = xinf
 			else:
 				if z["Days Left"] is None or z["Days Left"] == "":
 					z["Days Left"] = xinf
 				else:
 					z["Days Left"] = float(z["Days Left"])
 			if z["Days Since"] is None or z["Days Since"] == "":
+				# missing
 				z["Days Since"] = -xinf
 			else:
 				z["Days Since"] = float(z["Days Since"])
+				if not args.a and z["Days Since"] < 0:
+					# in the future
+					continue
 			for r in removefields:
 				del z[r]
 			t.append(z)
@@ -147,12 +159,13 @@ def generate(args,tenowait,tewait,mode):
 		if x["Days Left"] == xinf:
 			x["Days Left"] = "(%d)" % x["Days Since"]
 		del x["Days Since"]
-
-	body = tabulate.tabulate(tenowait,headers="keys",tablefmt=tableformat)
+	body = ""
 	if args.web != "":
-		body = args.web + "\n\n" + body
+		body += args.web + "\n\n"
 	if len(tewait) > 0:
 		body += "\n" + "\nWaiting\n" + xcolored(tabulate.tabulate(tewait,headers="keys",tablefmt=tableformat),"cyan")
+	body += "\n\n"
+	body += tabulate.tabulate(tenowait,headers="keys",tablefmt=tableformat)
 
 	return body
 
@@ -162,9 +175,10 @@ def main():
 	parser.add_argument('-m',action="store_true",help="send email")
 	parser.add_argument('-o',action="store_true",help="open web link")
 	parser.add_argument('--to',help="send email target")
+	parser.add_argument('--format',help="output format: colored plain html",default="colored")
 	parser.add_argument('--regions',help="regions info",action="store_true")
 	parser.add_argument('-i',help="input link or file")
-	parser.add_argument('-a',action="store_true",help="all actions, otherwise remove open ended")
+	parser.add_argument('-a',action="store_true",help="all actions, otherwise remove open ended and done")
 	parser.add_argument('--web',help="open link")
 	parser.add_argument('-s',help="Subject",default="Task Deadlines")
 	parser.add_argument('-f',help="Full Fields",action="store_true")
@@ -185,8 +199,8 @@ def main():
 		for k,v in q.iteritems():
 			print k,v
 		return
-	t,cf = findtasks(wb["Tasks"],q)
-	t.sort(key=lambda x: (x["Days Left"],-x["Days Since"]))
+	t,cf = findtasks(wb["Tasks"],q,args)
+	t.sort(key=lambda x: (-x["Days Left"],x["Days Since"]))
 	xinf = float("inf")
 	
 	# remove not actiond
@@ -209,7 +223,7 @@ def main():
 	tewait = [OrderedDict([(f,x[f]) for f in fields]) for x in wait]
 	tenowait = [OrderedDict([(f,x[f]) for f in fields]) for x in nowait]
 
-	body = generate(args,tenowait,tewait,"colored")
+	body = generate(args,tenowait,tewait,args.format)
 	print body
 	if args.m:
 		print "Sending mail to:",args.to,"subject:",args.s
