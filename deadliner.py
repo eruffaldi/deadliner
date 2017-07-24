@@ -39,6 +39,7 @@ Email Configure
 
 
 """
+import math
 from termcolor import colored
 import urllib2
 from openpyxl import *
@@ -62,7 +63,7 @@ def findregions(ws):
 	regions = dict()
 	for i,r in enumerate(ws.values):
 		if not inpart:
-			if r[2] == "Type" and r[3] == "Status":
+			if r[1] == "Type" and r[2] == "Status":
 				fields = [x for x in r if x != "" and x is not None]
 				regionname = lasthead
 				inpart = True
@@ -154,10 +155,11 @@ def generate(args,tenowait,tewait,mode):
 	for x in tenowait:
 		if x["Days Left"] <= 0:
 			x["Days Left"] = xcolored(str(x["Days Left"]),"red")
-		del x["Days Since"]
+		elif x["Days Left"] > 0:		
+			del x["Days Since"]
 	for x in tewait:
 		if x["Days Left"] == xinf:
-			x["Days Left"] = "(%d)" % x["Days Since"]
+			x["Days Left"] = "(%f)" % math.floor(x["Days Since"])
 		del x["Days Since"]
 	body = ""
 	if args.web != "":
@@ -198,6 +200,9 @@ def main():
 	if args.regions:
 		for k,v in q.iteritems():
 			print k,v
+		return
+	if len(q) == 0:
+		print "noregions !"
 		return
 	t,cf = findtasks(wb["Tasks"],q,args)
 	t.sort(key=lambda x: (-x["Days Left"],x["Days Since"]))
