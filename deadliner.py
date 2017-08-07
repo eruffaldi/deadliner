@@ -132,6 +132,7 @@ def findtasks(ws,q,args):
 				if not args.a and z["Days Since"] < 0:
 					# in the future
 					continue
+			z["WhatStatus"] = "%s (%s)" % (z["What"],z["Status"])
 			for r in removefields:
 				del z[r]
 			t.append(z)
@@ -139,6 +140,7 @@ def findtasks(ws,q,args):
 				
 def coloredhtml(t,c):
 	return "<span style='color:%s'>%s</span>" % (c,t)
+
 def generate(args,tenowait,tewait,mode):
 	if mode == "colored":
 		xcolored = colored
@@ -220,7 +222,7 @@ def main():
 		t = [x for x in nowait if x["Days Left"] != -xinf and x["Days Left"] != xinf]
 	#print tabulate.tabulate(t,headers="keys")
 
-	fields = ["Group","What","Days Left","Days Since"]
+	fields = ["Group","WhatStatus","Days Left","Days Since"]
 	if args.f:
 		# first the ones above, then all the others sorted
 		fields = fields + sorted(list(cf-set(fields)))
