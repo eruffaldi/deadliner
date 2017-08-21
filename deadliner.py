@@ -41,7 +41,9 @@ Email Configure
 """
 import math
 from termcolor import colored
-import urllib2
+#import urllib2
+from urllib.request import urlopen
+from functools import reduce
 from openpyxl import *
 import os
 import tabulate
@@ -52,7 +54,7 @@ from email.mime.text import MIMEText
 from subprocess import Popen, PIPE, STDOUT
 import argparse
 import webbrowser
-import cStringIO
+import io
 
 
 def findregions(ws):
@@ -88,8 +90,18 @@ def splitter(data, pred):
         (yes if pred(d) else no).append(d)
     return (yes, no)
 
+def patchgroup(z):
+	g = z["Group"]
+	a = z["Status"]
+	if a == "Rimborso":
+		z["Group"] = chr(0x1F4B0) + " " + g
+	elif g == "Writing":
+		z["Group"] = chr(0x270E) + " " + g
+	elif g == "Personal":
+		z["Group"] = chr(0x1F37A) + " " + g
+
 def findtasks(ws,q,args):
-	allfields = reduce(lambda x,y: x|y,[set(x["fields"]) for x in q.values()],set())
+	allfields = reduce(lambda x,y: x|y,[set(x["fields"]) for x in list(q.values())],set())
 	allfields.add("Group")
 	template = dict([(x,"") for x in allfields])
 	removefields = set(["Class","Location","Effective","Head"]) & allfields
@@ -97,7 +109,7 @@ def findtasks(ws,q,args):
 	t = []
 	# any group
 	xinf = float("inf")
-	for g,y in q.iteritems():
+	for g,y in q.items():
 		ff = y["fields"]
 		# any entry by row
 		for i in range(y["startrow"],y["endrow"]):
@@ -117,7 +129,7 @@ def findtasks(ws,q,args):
 				try:
 					z["Days Left"] = float(q)
 				except:
-					print "cannot convert Days Left WD",q,"to string"
+					print("cannot convert Days Left WD",q,"to string")
 					z["Days Left"] = xinf
 			else:
 				if z["Days Left"] is None or z["Days Left"] == "":
@@ -135,12 +147,18 @@ def findtasks(ws,q,args):
 			z["WhatStatus"] = "%s (%s)" % (z["What"],z["Status"])
 			for r in removefields:
 				del z[r]
+			patchgroup(z)
 			t.append(z)
 	return (t,allfields-removefields)
 				
 def coloredhtml(t,c):
 	return "<span style='color:%s'>%s</span>" % (c,t)
 
+def floorinf(x):
+	if x == float('inf') or x == -float('inf'):
+		return x
+	else:
+		return math.floor(x)
 def generate(args,tenowait,tewait,mode):
 	if mode == "colored":
 		xcolored = colored
@@ -161,7 +179,7 @@ def generate(args,tenowait,tewait,mode):
 			del x["Days Since"]
 	for x in tewait:
 		if x["Days Left"] == xinf:
-			x["Days Left"] = "(%f)" % math.floor(x["Days Since"])
+			x["Days Left"] = "(%f)" % floorinf(x["Days Since"])
 		del x["Days Since"]
 	body = ""
 	if args.web != "":
@@ -191,20 +209,20 @@ def main():
 	args = parser.parse_args()
 
 	if args.i.startswith("http"):
-		response = urllib2.urlopen(args.i)
+		response = urlopen(args.i)
 		#open(tmp,"wb").write()
-		tmp = cStringIO.StringIO(response.read())
+		tmp = io.BytesIO(response.read())
 	else:
 		tmp = args.i
 
 	wb = load_workbook(tmp,data_only=True)
 	q = findregions(wb["Tasks"])
 	if args.regions:
-		for k,v in q.iteritems():
-			print k,v
+		for k,v in q.items():
+			print(k,v)
 		return
 	if len(q) == 0:
-		print "noregions !"
+		print ("noregions !")
 		return
 	t,cf = findtasks(wb["Tasks"],q,args)
 	t.sort(key=lambda x: (-x["Days Left"],x["Days Since"]))
@@ -231,9 +249,9 @@ def main():
 	tenowait = [OrderedDict([(f,x[f]) for f in fields]) for x in nowait]
 
 	body = generate(args,tenowait,tewait,args.format)
-	print body
+	print(body)
 	if args.m:
-		print "Sending mail to:",args.to,"subject:",args.s
+		print("Sending mail to:",args.to,"subject:",args.s)
 		msg = MIMEText(generate(args,tewait,tenowait,"text"))
 		msg['Subject'] = args.s
 		if args.to is None:
@@ -245,7 +263,7 @@ def main():
 			if True:
 				p = Popen(['mail', '-s',msg["Subject"],msg["To"]], stdout=PIPE, stdin=PIPE, stderr=STDOUT)    
 				mail_stdout = p.communicate(input=msg.as_string())[0]
-				print mail_stdout
+				print (mail_stdout)
 			else:
 				s = smtplib.SMTP('localhost')
 				s.sendmail(args.to, [args.to], msg.as_string())
